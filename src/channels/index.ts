@@ -5,6 +5,9 @@
 
 // gmail
 
+// linkedin
+import './linkedin.js';
+
 // slack
 
 // telegram

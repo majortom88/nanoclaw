@@ -15,11 +15,13 @@
     "prepare": "husky",
     "setup": "tsx setup/index.ts",
     "auth": "tsx src/whatsapp-auth.ts",
+    "linkedin:auth": "tsx setup/linkedin-auth.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
+    "playwright": "^1.49.1",
     "cron-parser": "^5.5.0",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
