@@ -13,3 +13,4 @@ import './linkedin.js';
 // telegram
 
 // whatsapp
+import './whatsapp.js';
