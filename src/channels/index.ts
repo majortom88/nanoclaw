@@ -4,6 +4,7 @@
 // discord
 
 // gmail
+import './gmail.js';
 
 // linkedin
 import './linkedin.js';
