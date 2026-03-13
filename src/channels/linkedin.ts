@@ -14,7 +14,12 @@ import path from 'path';
 import { chromium, Browser, BrowserContext } from 'playwright';
 
 import { logger as rootLogger } from '../logger.js';
-import { Channel, NewMessage, OnChatMetadata, OnInboundMessage } from '../types.js';
+import {
+  Channel,
+  NewMessage,
+  OnChatMetadata,
+  OnInboundMessage,
+} from '../types.js';
 import type { ChannelOpts } from './registry.js';
 import { registerChannel } from './registry.js';
 
@@ -39,7 +44,9 @@ async function voyagerFetch(
 ): Promise<unknown> {
   const cookies = await context.cookies(LINKEDIN_BASE);
   const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-  const csrf = cookies.find((c) => c.name === 'JSESSIONID')?.value?.replace(/"/g, '') ?? '';
+  const csrf =
+    cookies.find((c) => c.name === 'JSESSIONID')?.value?.replace(/"/g, '') ??
+    '';
 
   const res = await fetch(`${LINKEDIN_BASE}${endpoint}`, {
     ...options,
@@ -54,7 +61,9 @@ async function voyagerFetch(
   });
 
   if (!res.ok) {
-    throw new Error(`LinkedIn API ${endpoint} → ${res.status} ${res.statusText}`);
+    throw new Error(
+      `LinkedIn API ${endpoint} → ${res.status} ${res.statusText}`,
+    );
   }
   return res.json();
 }
@@ -81,28 +90,44 @@ class LinkedInChannel implements Channel {
 
   async connect(): Promise<void> {
     if (!fs.existsSync(LINKEDIN_AUTH_PATH)) {
-      throw new Error(
-        `LinkedIn auth not found at ${LINKEDIN_AUTH_PATH}. Run: npm run linkedin:auth`,
+      logger.warn(
+        { path: LINKEDIN_AUTH_PATH },
+        'LinkedIn auth not found — channel inactive. Run: npm run linkedin:auth',
       );
+      return;
     }
 
-    this.browser = await chromium.launch({ headless: true });
-    this.context = await this.browser.newContext({ storageState: LINKEDIN_AUTH_PATH });
-
-    // Verify session is valid
     try {
-      await voyagerFetch(this.context, '/voyager/api/me');
+      this.browser = await chromium.launch({ headless: true });
+      this.context = await this.browser.newContext({
+        storageState: LINKEDIN_AUTH_PATH,
+      });
+
+      // Verify session — warn but don't crash if it fails
+      try {
+        await voyagerFetch(this.context, '/voyager/api/me');
+      } catch (err) {
+        logger.warn(
+          { err },
+          'LinkedIn session check failed — channel may be degraded. Re-run: npm run linkedin:auth',
+        );
+      }
+
+      this.startedAt = Date.now();
+      this.connected = true;
+      logger.info(
+        'LinkedIn connected, polling every %ds',
+        POLL_INTERVAL_MS / 1000,
+      );
+
+      this.pollTimer = setInterval(() => void this.poll(), POLL_INTERVAL_MS);
+      void this.poll();
     } catch (err) {
-      await this.browser.close();
-      throw new Error(`LinkedIn session expired — re-run: npm run linkedin:auth (${err})`);
+      logger.warn({ err }, 'LinkedIn channel failed to start — continuing without it');
+      await this.browser?.close();
+      this.browser = null;
+      this.context = null;
     }
-
-    this.startedAt = Date.now();
-    this.connected = true;
-    logger.info('LinkedIn connected, polling every %ds', POLL_INTERVAL_MS / 1000);
-
-    this.pollTimer = setInterval(() => void this.poll(), POLL_INTERVAL_MS);
-    void this.poll();
   }
 
   async disconnect(): Promise<void> {
@@ -163,7 +188,9 @@ class LinkedInChannel implements Channel {
     // Use browser automation for posting — more stable than the API
     const page = await this.context.newPage();
     try {
-      await page.goto(`${LINKEDIN_BASE}/feed/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${LINKEDIN_BASE}/feed/`, {
+        waitUntil: 'domcontentloaded',
+      });
 
       // Click "Start a post" button
       await page.getByRole('button', { name: /start a post/i }).click();
@@ -241,14 +268,19 @@ class LinkedInChannel implements Channel {
       if (ts <= since) continue;
 
       const msgEvent =
-        event.eventContent?.['com.linkedin.voyager.messaging.event.MessageEvent'];
+        event.eventContent?.[
+          'com.linkedin.voyager.messaging.event.MessageEvent'
+        ];
       const text = msgEvent?.attributedBody?.text;
       if (!text?.trim()) continue;
 
-      const member = event.from?.['com.linkedin.voyager.messaging.MessagingMember'];
+      const member =
+        event.from?.['com.linkedin.voyager.messaging.MessagingMember'];
       const profile = member?.miniProfile;
       const senderUrn = profile?.entityUrn ?? 'unknown';
-      const senderName = profile ? `${profile.firstName} ${profile.lastName}` : 'Unknown';
+      const senderName = profile
+        ? `${profile.firstName} ${profile.lastName}`
+        : 'Unknown';
 
       // Detect own messages by checking if the URN matches the authed user
       // (rough heuristic — accurate enough for routing)
