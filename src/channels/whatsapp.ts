@@ -35,15 +35,40 @@ const baileysLogger = {
   child: () => baileysLogger,
   trace: () => {},
   debug: (obj: unknown, msg?: string) =>
-    logger.debug(typeof obj === 'object' ? (obj as Record<string, unknown>) : { data: obj }, msg ?? ''),
+    logger.debug(
+      typeof obj === 'object'
+        ? (obj as Record<string, unknown>)
+        : { data: obj },
+      msg ?? '',
+    ),
   info: (obj: unknown, msg?: string) =>
-    logger.info(typeof obj === 'object' ? (obj as Record<string, unknown>) : { data: obj }, msg ?? ''),
+    logger.info(
+      typeof obj === 'object'
+        ? (obj as Record<string, unknown>)
+        : { data: obj },
+      msg ?? '',
+    ),
   warn: (obj: unknown, msg?: string) =>
-    logger.warn(typeof obj === 'object' ? (obj as Record<string, unknown>) : { data: obj }, msg ?? ''),
+    logger.warn(
+      typeof obj === 'object'
+        ? (obj as Record<string, unknown>)
+        : { data: obj },
+      msg ?? '',
+    ),
   error: (obj: unknown, msg?: string) =>
-    logger.error(typeof obj === 'object' ? (obj as Record<string, unknown>) : { data: obj }, msg ?? ''),
+    logger.error(
+      typeof obj === 'object'
+        ? (obj as Record<string, unknown>)
+        : { data: obj },
+      msg ?? '',
+    ),
   fatal: (obj: unknown, msg?: string) =>
-    logger.fatal(typeof obj === 'object' ? (obj as Record<string, unknown>) : { data: obj }, msg ?? ''),
+    logger.fatal(
+      typeof obj === 'object'
+        ? (obj as Record<string, unknown>)
+        : { data: obj },
+      msg ?? '',
+    ),
 };
 
 export interface WhatsAppChannelOpts {
