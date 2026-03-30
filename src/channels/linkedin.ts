@@ -23,7 +23,7 @@ import {
 import type { ChannelOpts } from './registry.js';
 import { registerChannel } from './registry.js';
 
-const logger = rootLogger.child({ channel: 'linkedin' });
+const logger = rootLogger;
 
 export const LINKEDIN_AUTH_PATH = path.join(
   os.homedir(),
@@ -116,8 +116,7 @@ class LinkedInChannel implements Channel {
       this.startedAt = Date.now();
       this.connected = true;
       logger.info(
-        'LinkedIn connected, polling every %ds',
-        POLL_INTERVAL_MS / 1000,
+        `LinkedIn connected, polling every ${POLL_INTERVAL_MS / 1000}s`,
       );
 
       this.pollTimer = setInterval(() => void this.poll(), POLL_INTERVAL_MS);

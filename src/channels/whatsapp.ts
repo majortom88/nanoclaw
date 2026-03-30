@@ -29,6 +29,23 @@ import { registerChannel, ChannelOpts } from './registry.js';
 
 const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+// Baileys expects a pino-compatible ILogger. Wrap our built-in logger.
+const baileysLogger = {
+  level: 'silent' as string,
+  child: () => baileysLogger,
+  trace: () => {},
+  debug: (obj: unknown, msg?: string) =>
+    logger.debug(typeof obj === 'object' ? (obj as Record<string, unknown>) : { data: obj }, msg ?? ''),
+  info: (obj: unknown, msg?: string) =>
+    logger.info(typeof obj === 'object' ? (obj as Record<string, unknown>) : { data: obj }, msg ?? ''),
+  warn: (obj: unknown, msg?: string) =>
+    logger.warn(typeof obj === 'object' ? (obj as Record<string, unknown>) : { data: obj }, msg ?? ''),
+  error: (obj: unknown, msg?: string) =>
+    logger.error(typeof obj === 'object' ? (obj as Record<string, unknown>) : { data: obj }, msg ?? ''),
+  fatal: (obj: unknown, msg?: string) =>
+    logger.fatal(typeof obj === 'object' ? (obj as Record<string, unknown>) : { data: obj }, msg ?? ''),
+};
+
 export interface WhatsAppChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
@@ -74,10 +91,10 @@ export class WhatsAppChannel implements Channel {
       version,
       auth: {
         creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, logger),
+        keys: makeCacheableSignalKeyStore(state.keys, baileysLogger),
       },
       printQRInTerminal: false,
-      logger,
+      logger: baileysLogger,
       browser: Browsers.macOS('Chrome'),
     });
 
