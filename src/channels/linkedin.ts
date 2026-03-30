@@ -123,7 +123,10 @@ class LinkedInChannel implements Channel {
       this.pollTimer = setInterval(() => void this.poll(), POLL_INTERVAL_MS);
       void this.poll();
     } catch (err) {
-      logger.warn({ err }, 'LinkedIn channel failed to start — continuing without it');
+      logger.warn(
+        { err },
+        'LinkedIn channel failed to start — continuing without it',
+      );
       await this.browser?.close();
       this.browser = null;
       this.context = null;

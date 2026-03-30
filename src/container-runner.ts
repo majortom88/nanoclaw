@@ -17,6 +17,7 @@ import {
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
+import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -175,6 +176,15 @@ function buildVolumeMounts(
     });
   }
 
+  // Google Calendar credentials directory (for Calendar MCP inside the container)
+  const gcalDir = path.join(homeDir, '.gcal-mcp');
+  fs.mkdirSync(gcalDir, { recursive: true });
+  mounts.push({
+    hostPath: gcalDir,
+    containerPath: '/home/node/.gcal-mcp',
+    readonly: false, // MCP needs to store and refresh OAuth tokens
+  });
+
   // Per-group IPC namespace: each group gets its own IPC directory
   // This prevents cross-group privilege escalation via IPC
   const groupIpcDir = resolveGroupIpcPath(group.folder);
@@ -232,6 +242,12 @@ function buildContainerArgs(
 
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
+
+  // Pass third-party API tokens so agents can call external services
+  const extraEnv = readEnvFile(['REPLICATE_API_TOKEN', 'OPENAI_API_KEY']);
+  for (const [key, value] of Object.entries(extraEnv)) {
+    if (value) args.push('-e', `${key}=${value}`);
+  }
 
   // Route API traffic through the credential proxy (containers never see real secrets)
   args.push(

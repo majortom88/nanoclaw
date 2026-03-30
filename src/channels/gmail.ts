@@ -40,6 +40,7 @@ export class GmailChannel implements Channel {
   private threadMeta = new Map<string, ThreadMeta>();
   private consecutiveErrors = 0;
   private userEmail = '';
+  private threadMetaPath = path.join(os.homedir(), '.gmail-mcp', 'thread-meta.json');
 
   constructor(opts: GmailChannelOpts, pollIntervalMs = 60000) {
     this.opts = opts;
@@ -89,11 +90,18 @@ export class GmailChannel implements Channel {
     this.userEmail = profile.data.emailAddress || '';
     logger.info({ email: this.userEmail }, 'Gmail channel connected');
 
+    // Load persisted thread metadata
+    this.loadThreadMeta();
+
     // Start polling with error backoff
     const schedulePoll = () => {
-      const backoffMs = this.consecutiveErrors > 0
-        ? Math.min(this.pollIntervalMs * Math.pow(2, this.consecutiveErrors), 30 * 60 * 1000)
-        : this.pollIntervalMs;
+      const backoffMs =
+        this.consecutiveErrors > 0
+          ? Math.min(
+              this.pollIntervalMs * Math.pow(2, this.consecutiveErrors),
+              30 * 60 * 1000,
+            )
+          : this.pollIntervalMs;
       this.pollTimer = setTimeout(() => {
         this.pollForMessages()
           .catch((err) => logger.error({ err }, 'Gmail poll error'))
@@ -118,7 +126,8 @@ export class GmailChannel implements Channel {
     const meta = this.threadMeta.get(threadId);
 
     if (!meta) {
-      logger.warn({ jid }, 'No thread metadata for reply, cannot send');
+      // No thread to reply to — send a fresh email to the last known sender
+      await this.sendFreshEmail(text);
       return;
     }
 
@@ -210,8 +219,18 @@ export class GmailChannel implements Channel {
       this.consecutiveErrors = 0;
     } catch (err) {
       this.consecutiveErrors++;
-      const backoffMs = Math.min(this.pollIntervalMs * Math.pow(2, this.consecutiveErrors), 30 * 60 * 1000);
-      logger.error({ err, consecutiveErrors: this.consecutiveErrors, nextPollMs: backoffMs }, 'Gmail poll failed');
+      const backoffMs = Math.min(
+        this.pollIntervalMs * Math.pow(2, this.consecutiveErrors),
+        30 * 60 * 1000,
+      );
+      logger.error(
+        {
+          err,
+          consecutiveErrors: this.consecutiveErrors,
+          nextPollMs: backoffMs,
+        },
+        'Gmail poll failed',
+      );
     }
   }
 
@@ -255,22 +274,21 @@ export class GmailChannel implements Channel {
 
     const chatJid = `gmail:${threadId}`;
 
-    // Cache thread metadata for replies
+    // Cache thread metadata for replies (persisted to survive restarts)
     this.threadMeta.set(threadId, {
       sender: senderEmail,
       senderName,
       subject,
       messageId: rfc2822MessageId,
     });
+    this.saveThreadMeta();
 
     // Store chat metadata for group discovery
     this.opts.onChatMetadata(chatJid, timestamp, subject, 'gmail', false);
 
     // Find the main group to deliver the email notification
     const groups = this.opts.registeredGroups();
-    const mainEntry = Object.entries(groups).find(
-      ([, g]) => g.isMain === true,
-    );
+    const mainEntry = Object.entries(groups).find(([, g]) => g.isMain === true);
 
     if (!mainEntry) {
       logger.debug(
@@ -281,6 +299,17 @@ export class GmailChannel implements Channel {
     }
 
     const mainJid = mainEntry[0];
+
+    // Ensure the main JID exists in the chats table before storing messages
+    this.opts.onChatMetadata(mainJid, timestamp, 'Gmail', 'gmail', false);
+
+    // Only trigger Andy if the email explicitly mentions @Andy
+    const fullText = `${subject}\n${body}`;
+    if (!/@[Aa]ndy\b/.test(fullText)) {
+      logger.debug({ from: senderName, subject }, 'Gmail: no @Andy mention, skipping trigger');
+      return;
+    }
+
     const content = `[Email from ${senderName} <${senderEmail}>]\nSubject: ${subject}\n\n${body}`;
 
     this.opts.onMessage(mainJid, {
@@ -308,6 +337,69 @@ export class GmailChannel implements Channel {
       { mainJid, from: senderName, subject },
       'Gmail email delivered to main group',
     );
+  }
+
+  private loadThreadMeta(): void {
+    try {
+      if (fs.existsSync(this.threadMetaPath)) {
+        const data = JSON.parse(fs.readFileSync(this.threadMetaPath, 'utf-8'));
+        for (const [threadId, meta] of Object.entries(data)) {
+          this.threadMeta.set(threadId, meta as ThreadMeta);
+        }
+        logger.debug({ count: this.threadMeta.size }, 'Gmail thread metadata loaded');
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Failed to load Gmail thread metadata');
+    }
+  }
+
+  private saveThreadMeta(): void {
+    try {
+      const data: Record<string, ThreadMeta> = {};
+      for (const [threadId, meta] of this.threadMeta.entries()) {
+        data[threadId] = meta;
+      }
+      fs.writeFileSync(this.threadMetaPath, JSON.stringify(data, null, 2));
+    } catch (err) {
+      logger.warn({ err }, 'Failed to save Gmail thread metadata');
+    }
+  }
+
+  private async sendFreshEmail(text: string): Promise<void> {
+    if (!this.gmail) return;
+
+    // Find the most recently seen sender to reply to
+    const lastMeta = [...this.threadMeta.values()].pop();
+    const to = lastMeta?.sender || this.userEmail;
+    if (!to || to === this.userEmail) {
+      logger.warn('No known sender for fresh email, dropping reply');
+      return;
+    }
+
+    const headers = [
+      `To: ${to}`,
+      `From: ${this.userEmail}`,
+      `Subject: Andy`,
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      text,
+    ].join('\r\n');
+
+    const encodedMessage = Buffer.from(headers)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    try {
+      await this.gmail.users.messages.send({
+        userId: 'me',
+        requestBody: { raw: encodedMessage },
+      });
+      logger.info({ to }, 'Gmail fresh reply sent');
+    } catch (err) {
+      logger.error({ to, err }, 'Failed to send Gmail fresh reply');
+    }
   }
 
   private extractTextBody(

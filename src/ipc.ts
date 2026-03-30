@@ -3,7 +3,7 @@ import path from 'path';
 
 import { CronExpressionParser } from 'cron-parser';
 
-import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
+import { DATA_DIR, GROUPS_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
@@ -12,6 +12,8 @@ import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
+  sendPhoto?: (jid: string, filePath: string, caption?: string) => Promise<void>;
+  sendVoice?: (jid: string, filePath: string) => Promise<void>;
   registeredGroups: () => Record<string, RegisteredGroup>;
   registerGroup: (jid: string, group: RegisteredGroup) => void;
   syncGroups: (force: boolean) => Promise<void>;
@@ -89,6 +91,62 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   logger.warn(
                     { chatJid: data.chatJid, sourceGroup },
                     'Unauthorized IPC message attempt blocked',
+                  );
+                }
+              } else if (data.type === 'send_voice' && data.chatJid && data.audioPath) {
+                const targetGroup = registeredGroups[data.chatJid];
+                if (
+                  isMain ||
+                  (targetGroup && targetGroup.folder === sourceGroup)
+                ) {
+                  const groupEntry = registeredGroups[data.chatJid] ||
+                    Object.values(registeredGroups).find((g) => g.folder === sourceGroup);
+                  if (!groupEntry) {
+                    logger.warn({ chatJid: data.chatJid, sourceGroup }, 'Cannot resolve group for voice send');
+                  } else {
+                    const hostPath = data.audioPath.replace(
+                      '/workspace/group',
+                      path.join(GROUPS_DIR, groupEntry.folder),
+                    );
+                    await deps.sendVoice?.(data.chatJid, hostPath);
+                    logger.info(
+                      { chatJid: data.chatJid, hostPath, sourceGroup },
+                      'IPC voice note sent',
+                    );
+                  }
+                } else {
+                  logger.warn(
+                    { chatJid: data.chatJid, sourceGroup },
+                    'Unauthorized IPC send_voice attempt blocked',
+                  );
+                }
+              } else if (data.type === 'send_image' && data.chatJid && data.imagePath) {
+                // Authorization: same as send_message
+                const targetGroup = registeredGroups[data.chatJid];
+                if (
+                  isMain ||
+                  (targetGroup && targetGroup.folder === sourceGroup)
+                ) {
+                  // Convert container path /workspace/group/... to host path
+                  const groupEntry = registeredGroups[data.chatJid] ||
+                    Object.values(registeredGroups).find((g) => g.folder === sourceGroup);
+                  if (!groupEntry) {
+                    logger.warn({ chatJid: data.chatJid, sourceGroup }, 'Cannot resolve group for image send');
+                  } else {
+                    const hostPath = data.imagePath.replace(
+                      '/workspace/group',
+                      path.join(GROUPS_DIR, groupEntry.folder),
+                    );
+                    await deps.sendPhoto?.(data.chatJid, hostPath, data.caption);
+                    logger.info(
+                      { chatJid: data.chatJid, hostPath, sourceGroup },
+                      'IPC image sent',
+                    );
+                  }
+                } else {
+                  logger.warn(
+                    { chatJid: data.chatJid, sourceGroup },
+                    'Unauthorized IPC send_image attempt blocked',
                   );
                 }
               }

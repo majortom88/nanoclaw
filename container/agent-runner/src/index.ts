@@ -337,6 +337,8 @@ async function runQuery(
   sdkEnv: Record<string, string | undefined>,
   resumeAt?: string,
 ): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean }> {
+  const gdriveMcpPath = path.join(path.dirname(mcpServerPath), 'gdrive-mcp.js');
+
   const stream = new MessageStream();
   stream.push(prompt);
 
@@ -392,6 +394,7 @@ async function runQuery(
   for await (const message of query({
     prompt: stream,
     options: {
+      model: 'claude-sonnet-4-6',
       cwd: '/workspace/group',
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
       resume: sessionId,
@@ -409,6 +412,8 @@ async function runQuery(
         'NotebookEdit',
         'mcp__nanoclaw__*',
         'mcp__gmail__*',
+        'mcp__gdrive__*',
+        'mcp__gcal__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -428,7 +433,23 @@ async function runQuery(
           command: 'npx',
           args: ['-y', '@gongrzhe/server-gmail-autoauth-mcp'],
         },
+        gdrive: {
+          command: 'node',
+          args: [gdriveMcpPath],
+          env: {
+            GDRIVE_AUTH_PATH: '/workspace/extra/gdrive-auth.json',
+          },
+        },
+        gcal: {
+          command: 'npx',
+          args: ['-y', '@cocal/google-calendar-mcp'],
+          env: {
+            GOOGLE_OAUTH_CREDENTIALS: '/home/node/.gcal-mcp/gcp-oauth.keys.json',
+            GOOGLE_CALENDAR_MCP_TOKEN_PATH: '/home/node/.gcal-mcp/token.json',
+          },
+        },
       },
+      betas: ['compact-2026-01-12' as 'context-1m-2025-08-07'],
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
       },

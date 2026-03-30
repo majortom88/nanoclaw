@@ -1,9 +1,12 @@
 import https from 'https';
-import { Api, Bot } from 'grammy';
+import path from 'path';
+import { Api, Bot, InputFile } from 'grammy';
 
-import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
+import { ASSISTANT_NAME, GROUPS_DIR, TRIGGER_PATTERN } from '../config.js';
 import { readEnvFile } from '../env.js';
+import { saveImageToGroup } from '../image.js';
 import { logger } from '../logger.js';
+import { transcribeAudio } from '../transcription.js';
 import { registerChannel, ChannelOpts } from './registry.js';
 import {
   Channel,
@@ -193,9 +196,45 @@ export class TelegramChannel implements Channel {
       });
     };
 
-    this.bot.on('message:photo', (ctx) => storeNonText(ctx, '[Photo]'));
+    this.bot.on('message:photo', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      const photos = ctx.message.photo;
+      const largest = photos[photos.length - 1];
+      const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
+
+      try {
+        const file = await ctx.api.getFile(largest.file_id);
+        if (!file.file_path) { storeNonText(ctx, `[Photo]${caption}`); return; }
+        const buffer = await this.downloadFile(file.file_path);
+        const ext = file.file_path.split('.').pop() || 'jpg';
+        const groupDir = path.join(GROUPS_DIR, group.folder);
+        const containerPath = saveImageToGroup(buffer, groupDir, ctx.message.message_id.toString(), ext);
+        storeNonText(ctx, `[Image at ${containerPath} — use the Read tool to view it]${caption}`);
+      } catch (err) {
+        logger.warn({ err }, 'Failed to download Telegram photo');
+        storeNonText(ctx, `[Photo]${caption}`);
+      }
+    });
     this.bot.on('message:video', (ctx) => storeNonText(ctx, '[Video]'));
-    this.bot.on('message:voice', (ctx) => storeNonText(ctx, '[Voice message]'));
+    this.bot.on('message:voice', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      try {
+        const file = await ctx.api.getFile(ctx.message.voice.file_id);
+        if (!file.file_path) { storeNonText(ctx, '[Voice message]'); return; }
+        const buffer = await this.downloadFile(file.file_path);
+        const transcript = await transcribeAudio(buffer, 'voice.ogg');
+        storeNonText(ctx, transcript ? `[Voice: ${transcript}]` : '[Voice message]');
+      } catch (err) {
+        logger.warn({ err }, 'Failed to process Telegram voice message');
+        storeNonText(ctx, '[Voice message]');
+      }
+    });
     this.bot.on('message:audio', (ctx) => storeNonText(ctx, '[Audio]'));
     this.bot.on('message:document', (ctx) => {
       const name = ctx.message.document?.file_name || 'file';
@@ -259,6 +298,13 @@ export class TelegramChannel implements Channel {
     }
   }
 
+  private async downloadFile(filePath: string): Promise<Buffer> {
+    const url = `https://api.telegram.org/file/bot${this.botToken}/${filePath}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Telegram file download failed: ${response.status}`);
+    return Buffer.from(await response.arrayBuffer());
+  }
+
   isConnected(): boolean {
     return this.bot !== null;
   }
@@ -272,6 +318,36 @@ export class TelegramChannel implements Channel {
       this.bot.stop();
       this.bot = null;
       logger.info('Telegram bot stopped');
+    }
+  }
+
+  async sendVoice(jid: string, filePath: string): Promise<void> {
+    if (!this.bot) {
+      logger.warn('Telegram bot not initialized');
+      return;
+    }
+    try {
+      const numericId = jid.replace(/^tg:/, '');
+      await this.bot.api.sendVoice(numericId, new InputFile(filePath));
+      logger.info({ jid, filePath }, 'Telegram voice note sent');
+    } catch (err) {
+      logger.error({ jid, filePath, err }, 'Failed to send Telegram voice note');
+    }
+  }
+
+  async sendPhoto(jid: string, filePath: string, caption?: string): Promise<void> {
+    if (!this.bot) {
+      logger.warn('Telegram bot not initialized');
+      return;
+    }
+    try {
+      const numericId = jid.replace(/^tg:/, '');
+      await this.bot.api.sendPhoto(numericId, new InputFile(filePath), {
+        caption: caption || undefined,
+      });
+      logger.info({ jid, filePath }, 'Telegram photo sent');
+    } catch (err) {
+      logger.error({ jid, filePath, err }, 'Failed to send Telegram photo');
     }
   }
 

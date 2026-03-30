@@ -333,6 +333,50 @@ Use available_groups.json to find the JID for a group. The folder name must be c
   },
 );
 
+server.tool(
+  'send_image',
+  "Send an image file to the user via Telegram. The image must already exist in the container's /workspace/group directory.",
+  {
+    image_path: z.string().describe('Absolute path to the image file inside the container (e.g. /workspace/group/images/gen-abc123.png)'),
+    caption: z.string().optional().describe('Optional caption to send with the image'),
+  },
+  async (args) => {
+    const data: Record<string, string | undefined> = {
+      type: 'send_image',
+      chatJid,
+      imagePath: args.image_path,
+      caption: args.caption || undefined,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: 'Image queued for sending.' }] };
+  },
+);
+
+server.tool(
+  'send_voice',
+  "Send a voice note to the user via Telegram. The audio file must already exist in the container's /workspace/group directory.",
+  {
+    audio_path: z.string().describe('Absolute path to the audio file inside the container (e.g. /workspace/group/audio/tts-abc123.ogg)'),
+  },
+  async (args) => {
+    const data: Record<string, string | undefined> = {
+      type: 'send_voice',
+      chatJid,
+      audioPath: args.audio_path,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: 'Voice note queued for sending.' }] };
+  },
+);
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);
