@@ -256,7 +256,12 @@ async function buildContainerArgs(
   args.push('-e', `TZ=${TIMEZONE}`);
 
   // Pass third-party API tokens so agents can call external services
-  const extraEnv = readEnvFile(['REPLICATE_API_TOKEN', 'OPENAI_API_KEY', 'GITHUB_TOKEN', 'RENDER_API_KEY']);
+  const extraEnv = readEnvFile([
+    'REPLICATE_API_TOKEN',
+    'OPENAI_API_KEY',
+    'GITHUB_TOKEN',
+    'RENDER_API_KEY',
+  ]);
   for (const [key, value] of Object.entries(extraEnv)) {
     if (value) args.push('-e', `${key}=${value}`);
   }
