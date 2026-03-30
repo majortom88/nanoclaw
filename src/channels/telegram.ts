@@ -207,12 +207,23 @@ export class TelegramChannel implements Channel {
 
       try {
         const file = await ctx.api.getFile(largest.file_id);
-        if (!file.file_path) { storeNonText(ctx, `[Photo]${caption}`); return; }
+        if (!file.file_path) {
+          storeNonText(ctx, `[Photo]${caption}`);
+          return;
+        }
         const buffer = await this.downloadFile(file.file_path);
         const ext = file.file_path.split('.').pop() || 'jpg';
         const groupDir = path.join(GROUPS_DIR, group.folder);
-        const containerPath = saveImageToGroup(buffer, groupDir, ctx.message.message_id.toString(), ext);
-        storeNonText(ctx, `[Image at ${containerPath} — use the Read tool to view it]${caption}`);
+        const containerPath = saveImageToGroup(
+          buffer,
+          groupDir,
+          ctx.message.message_id.toString(),
+          ext,
+        );
+        storeNonText(
+          ctx,
+          `[Image at ${containerPath} — use the Read tool to view it]${caption}`,
+        );
       } catch (err) {
         logger.warn({ err }, 'Failed to download Telegram photo');
         storeNonText(ctx, `[Photo]${caption}`);
@@ -226,10 +237,16 @@ export class TelegramChannel implements Channel {
 
       try {
         const file = await ctx.api.getFile(ctx.message.voice.file_id);
-        if (!file.file_path) { storeNonText(ctx, '[Voice message]'); return; }
+        if (!file.file_path) {
+          storeNonText(ctx, '[Voice message]');
+          return;
+        }
         const buffer = await this.downloadFile(file.file_path);
         const transcript = await transcribeAudio(buffer, 'voice.ogg');
-        storeNonText(ctx, transcript ? `[Voice: ${transcript}]` : '[Voice message]');
+        storeNonText(
+          ctx,
+          transcript ? `[Voice: ${transcript}]` : '[Voice message]',
+        );
       } catch (err) {
         logger.warn({ err }, 'Failed to process Telegram voice message');
         storeNonText(ctx, '[Voice message]');
@@ -301,7 +318,8 @@ export class TelegramChannel implements Channel {
   private async downloadFile(filePath: string): Promise<Buffer> {
     const url = `https://api.telegram.org/file/bot${this.botToken}/${filePath}`;
     const response = await fetch(url);
-    if (!response.ok) throw new Error(`Telegram file download failed: ${response.status}`);
+    if (!response.ok)
+      throw new Error(`Telegram file download failed: ${response.status}`);
     return Buffer.from(await response.arrayBuffer());
   }
 
@@ -331,11 +349,18 @@ export class TelegramChannel implements Channel {
       await this.bot.api.sendVoice(numericId, new InputFile(filePath));
       logger.info({ jid, filePath }, 'Telegram voice note sent');
     } catch (err) {
-      logger.error({ jid, filePath, err }, 'Failed to send Telegram voice note');
+      logger.error(
+        { jid, filePath, err },
+        'Failed to send Telegram voice note',
+      );
     }
   }
 
-  async sendPhoto(jid: string, filePath: string, caption?: string): Promise<void> {
+  async sendPhoto(
+    jid: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<void> {
     if (!this.bot) {
       logger.warn('Telegram bot not initialized');
       return;

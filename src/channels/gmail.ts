@@ -40,7 +40,11 @@ export class GmailChannel implements Channel {
   private threadMeta = new Map<string, ThreadMeta>();
   private consecutiveErrors = 0;
   private userEmail = '';
-  private threadMetaPath = path.join(os.homedir(), '.gmail-mcp', 'thread-meta.json');
+  private threadMetaPath = path.join(
+    os.homedir(),
+    '.gmail-mcp',
+    'thread-meta.json',
+  );
 
   constructor(opts: GmailChannelOpts, pollIntervalMs = 60000) {
     this.opts = opts;
@@ -306,7 +310,10 @@ export class GmailChannel implements Channel {
     // Only trigger Andy if the email explicitly mentions @Andy
     const fullText = `${subject}\n${body}`;
     if (!/@[Aa]ndy\b/.test(fullText)) {
-      logger.debug({ from: senderName, subject }, 'Gmail: no @Andy mention, skipping trigger');
+      logger.debug(
+        { from: senderName, subject },
+        'Gmail: no @Andy mention, skipping trigger',
+      );
       return;
     }
 
@@ -346,7 +353,10 @@ export class GmailChannel implements Channel {
         for (const [threadId, meta] of Object.entries(data)) {
           this.threadMeta.set(threadId, meta as ThreadMeta);
         }
-        logger.debug({ count: this.threadMeta.size }, 'Gmail thread metadata loaded');
+        logger.debug(
+          { count: this.threadMeta.size },
+          'Gmail thread metadata loaded',
+        );
       }
     } catch (err) {
       logger.warn({ err }, 'Failed to load Gmail thread metadata');

@@ -12,7 +12,11 @@ import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
-  sendPhoto?: (jid: string, filePath: string, caption?: string) => Promise<void>;
+  sendPhoto?: (
+    jid: string,
+    filePath: string,
+    caption?: string,
+  ) => Promise<void>;
   sendVoice?: (jid: string, filePath: string) => Promise<void>;
   registeredGroups: () => Record<string, RegisteredGroup>;
   registerGroup: (jid: string, group: RegisteredGroup) => void;
@@ -93,16 +97,26 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     'Unauthorized IPC message attempt blocked',
                   );
                 }
-              } else if (data.type === 'send_voice' && data.chatJid && data.audioPath) {
+              } else if (
+                data.type === 'send_voice' &&
+                data.chatJid &&
+                data.audioPath
+              ) {
                 const targetGroup = registeredGroups[data.chatJid];
                 if (
                   isMain ||
                   (targetGroup && targetGroup.folder === sourceGroup)
                 ) {
-                  const groupEntry = registeredGroups[data.chatJid] ||
-                    Object.values(registeredGroups).find((g) => g.folder === sourceGroup);
+                  const groupEntry =
+                    registeredGroups[data.chatJid] ||
+                    Object.values(registeredGroups).find(
+                      (g) => g.folder === sourceGroup,
+                    );
                   if (!groupEntry) {
-                    logger.warn({ chatJid: data.chatJid, sourceGroup }, 'Cannot resolve group for voice send');
+                    logger.warn(
+                      { chatJid: data.chatJid, sourceGroup },
+                      'Cannot resolve group for voice send',
+                    );
                   } else {
                     const hostPath = data.audioPath.replace(
                       '/workspace/group',
@@ -120,7 +134,11 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     'Unauthorized IPC send_voice attempt blocked',
                   );
                 }
-              } else if (data.type === 'send_image' && data.chatJid && data.imagePath) {
+              } else if (
+                data.type === 'send_image' &&
+                data.chatJid &&
+                data.imagePath
+              ) {
                 // Authorization: same as send_message
                 const targetGroup = registeredGroups[data.chatJid];
                 if (
@@ -128,16 +146,26 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   (targetGroup && targetGroup.folder === sourceGroup)
                 ) {
                   // Convert container path /workspace/group/... to host path
-                  const groupEntry = registeredGroups[data.chatJid] ||
-                    Object.values(registeredGroups).find((g) => g.folder === sourceGroup);
+                  const groupEntry =
+                    registeredGroups[data.chatJid] ||
+                    Object.values(registeredGroups).find(
+                      (g) => g.folder === sourceGroup,
+                    );
                   if (!groupEntry) {
-                    logger.warn({ chatJid: data.chatJid, sourceGroup }, 'Cannot resolve group for image send');
+                    logger.warn(
+                      { chatJid: data.chatJid, sourceGroup },
+                      'Cannot resolve group for image send',
+                    );
                   } else {
                     const hostPath = data.imagePath.replace(
                       '/workspace/group',
                       path.join(GROUPS_DIR, groupEntry.folder),
                     );
-                    await deps.sendPhoto?.(data.chatJid, hostPath, data.caption);
+                    await deps.sendPhoto?.(
+                      data.chatJid,
+                      hostPath,
+                      data.caption,
+                    );
                     logger.info(
                       { chatJid: data.chatJid, hostPath, sourceGroup },
                       'IPC image sent',

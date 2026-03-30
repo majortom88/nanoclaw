@@ -18,7 +18,10 @@ export function saveImageToGroup(
   const filename = `${messageId}.${ext}`;
   const hostPath = path.join(imagesDir, filename);
   fs.writeFileSync(hostPath, buffer);
-  logger.debug({ hostPath, size: buffer.length }, 'Image saved to group workspace');
+  logger.debug(
+    { hostPath, size: buffer.length },
+    'Image saved to group workspace',
+  );
   // The group dir is mounted at /workspace/group in the container
   return `/workspace/group/images/${filename}`;
 }
